@@ -87,30 +87,32 @@
     (let (
         (new-id (+ (var-get game-counter) u1))
     )
-        (asserts! (or (is-eq mode "single") (is-eq mode "best-of-3") (is-eq mode "best-of-5")) (err u400))
-        (try! (stx-transfer? wager tx-sender (as-contract tx-sender)))
-        (map-set games new-id {
-            player1: tx-sender,
-            player2: opponent,
-            wager: wager,
-            status: "open",
-            winner: none,
-            created-at: block-height,
-            updated-at: block-height,
-            round: u1,
-            series-wins-p1: u0,
-            series-wins-p2: u0,
-            mode: mode
-        })
-        (var-set game-counter new-id)
-        (if (is-none opponent)
-            (match (as-max-len? (append (var-get open-games-var) new-id) u50)
-                success (var-set open-games-var success)
-                err false
+        (begin
+            (asserts! (or (is-eq mode "single") (is-eq mode "best-of-3") (is-eq mode "best-of-5")) (err u400))
+            (try! (stx-transfer? wager tx-sender (as-contract tx-sender)))
+            (map-set games new-id {
+                player1: tx-sender,
+                player2: opponent,
+                wager: wager,
+                status: "open",
+                winner: none,
+                created-at: block-height,
+                updated-at: block-height,
+                round: u1,
+                series-wins-p1: u0,
+                series-wins-p2: u0,
+                mode: mode
+            })
+            (var-set game-counter new-id)
+            (if (is-none opponent)
+                (match (as-max-len? (append (var-get open-games-var) new-id) u50)
+                    success (var-set open-games-var success)
+                    false
+                )
+                false
             )
-            false
+            (ok new-id)
         )
-        (ok new-id)
     )
 )
 
@@ -118,15 +120,17 @@
     (let (
         (game (unwrap! (map-get? games game-id) err-game-not-found))
     )
-        (asserts! (is-eq (get status game) "open") err-game-not-open)
-        (asserts! (or (is-none (get player2 game)) (is-eq (some tx-sender) (get player2 game))) err-wrong-opponent)
-        (try! (stx-transfer? (get wager game) tx-sender (as-contract tx-sender)))
-        (map-set games game-id (merge game {
-            player2: (some tx-sender),
-            status: "joined",
-            updated-at: block-height
-        }))
-        (ok true)
+        (begin
+            (asserts! (is-eq (get status game) "open") err-game-not-open)
+            (asserts! (or (is-none (get player2 game)) (is-eq (some tx-sender) (get player2 game))) err-wrong-opponent)
+            (try! (stx-transfer? (get wager game) tx-sender (as-contract tx-sender)))
+            (map-set games game-id (merge game {
+                player2: (some tx-sender),
+                status: "joined",
+                updated-at: block-height
+            }))
+            (ok true)
+        )
     )
 )
 
@@ -134,14 +138,16 @@
     (let (
         (game (unwrap! (map-get? games game-id) err-game-not-found))
     )
-        (asserts! (is-eq (get status game) "open") err-game-complete)
-        (asserts! (is-eq tx-sender (get player1 game)) err-not-creator)
-        (try! (as-contract (stx-transfer? (get wager game) tx-sender (get player1 game))))
-        (map-set games game-id (merge game {
-            status: "cancelled",
-            updated-at: block-height
-        }))
-        (ok true)
+        (begin
+            (asserts! (is-eq (get status game) "open") err-game-complete)
+            (asserts! (is-eq tx-sender (get player1 game)) err-not-creator)
+            (try! (as-contract (stx-transfer? (get wager game) tx-sender (get player1 game))))
+            (map-set games game-id (merge game {
+                status: "cancelled",
+                updated-at: block-height
+            }))
+            (ok true)
+        )
     )
 )
 
@@ -150,27 +156,29 @@
         (game (unwrap! (map-get? games game-id) err-game-not-found))
         (round (get round game))
     )
-        (asserts! (or (is-eq (get status game) "joined") (is-eq (get status game) "committed")) err-game-complete)
-        (asserts! (or (is-eq tx-sender (get player1 game)) (is-eq (some tx-sender) (get player2 game))) err-not-participant)
-        (asserts! (is-none (map-get? commitments { game-id: game-id, round: round, player: tx-sender })) err-already-committed)
-        
-        (map-set commitments { game-id: game-id, round: round, player: tx-sender } {
-            move-hash: move-hash,
-            revealed: false,
-            move: none,
-            salt: none
-        })
-        
-        (let (
-            (opponent (if (is-eq tx-sender (get player1 game)) (unwrap-panic (get player2 game)) (get player1 game)))
-            (opponent-commit (map-get? commitments { game-id: game-id, round: round, player: opponent }))
-        )
-            (if (is-some opponent-commit)
-                (map-set games game-id (merge game { status: "committed", updated-at: block-height }))
-                (map-set games game-id (merge game { status: "joined", updated-at: block-height }))
+        (begin
+            (asserts! (or (is-eq (get status game) "joined") (is-eq (get status game) "committed")) err-game-complete)
+            (asserts! (or (is-eq tx-sender (get player1 game)) (is-eq (some tx-sender) (get player2 game))) err-not-participant)
+            (asserts! (is-none (map-get? commitments { game-id: game-id, round: round, player: tx-sender })) err-already-committed)
+            
+            (map-set commitments { game-id: game-id, round: round, player: tx-sender } {
+                move-hash: move-hash,
+                revealed: false,
+                move: none,
+                salt: none
+            })
+            
+            (let (
+                (opponent (if (is-eq tx-sender (get player1 game)) (unwrap-panic (get player2 game)) (get player1 game)))
+                (opponent-commit (map-get? commitments { game-id: game-id, round: round, player: opponent }))
             )
+                (if (is-some opponent-commit)
+                    (map-set games game-id (merge game { status: "committed", updated-at: block-height }))
+                    (map-set games game-id (merge game { status: "joined", updated-at: block-height }))
+                )
+            )
+            (ok true)
         )
-        (ok true)
     )
 )
 
@@ -233,13 +241,15 @@
                         (winner (if (>= new-p1-wins wins-req) p1 p2))
                         (loser (if (>= new-p1-wins wins-req) p2 p1))
                     )
-                        (try! (as-contract (stx-transfer? payout tx-sender winner)))
-                        (if (> fee u0) (try! (as-contract (stx-transfer? fee tx-sender (var-get fee-address)))) true)
-                        (update-stats winner true false payout wager)
-                        (update-stats loser false false u0 wager)
-                        (try! (as-contract (contract-call? .rps-token mint u10000000 winner)))
-                        (map-set games game-id (merge game { status: "finished", winner: (some winner), series-wins-p1: new-p1-wins, series-wins-p2: new-p2-wins, updated-at: block-height }))
-                        (ok true)
+                        (begin
+                            (try! (as-contract (stx-transfer? payout tx-sender winner)))
+                            (if (> fee u0) (try! (as-contract (stx-transfer? fee tx-sender (var-get fee-address)))) true)
+                            (update-stats winner true false payout wager)
+                            (update-stats loser false false u0 wager)
+                            (try! (as-contract (contract-call? .rps-token mint u10000000 winner)))
+                            (map-set games game-id (merge game { status: "finished", winner: (some winner), series-wins-p1: new-p1-wins, series-wins-p2: new-p2-wins, updated-at: block-height }))
+                            (ok true)
+                        )
                     )
                 )
             )
@@ -263,28 +273,30 @@
         (round (get round game))
         (commit (unwrap! (map-get? commitments { game-id: game-id, round: round, player: tx-sender }) err-not-committed))
     )
-        (asserts! (is-eq (get status game) "committed") err-reveal-before-both-commit)
-        (asserts! (not (get revealed commit)) err-already-revealed)
-        (asserts! (or (is-eq move u1) (is-eq move u2) (is-eq move u3)) err-invalid-move)
-        
-        ;; verify hash
-        (asserts! (is-eq (get move-hash commit) (sha256 (unwrap-panic (to-consensus-buff? { move: move, salt: salt })))) err-hash-mismatch)
-        
-        (map-set commitments { game-id: game-id, round: round, player: tx-sender } (merge commit {
-            revealed: true,
-            move: (some move),
-            salt: (some salt)
-        }))
-        
-        (let (
-            (opponent (if (is-eq tx-sender (get player1 game)) (unwrap-panic (get player2 game)) (get player1 game)))
-            (opponent-commit (unwrap-panic (map-get? commitments { game-id: game-id, round: round, player: opponent })))
-        )
-            (if (get revealed opponent-commit)
-                (resolve-round game-id (merge game { status: "revealed", updated-at: block-height }))
-                (begin
-                    (map-set games game-id (merge game { updated-at: block-height }))
-                    (ok true)
+        (begin
+            (asserts! (is-eq (get status game) "committed") err-reveal-before-both-commit)
+            (asserts! (not (get revealed commit)) err-already-revealed)
+            (asserts! (or (is-eq move u1) (is-eq move u2) (is-eq move u3)) err-invalid-move)
+            
+            ;; verify hash
+            (asserts! (is-eq (get move-hash commit) (sha256 (unwrap-panic (to-consensus-buff? { move: move, salt: salt })))) err-hash-mismatch)
+            
+            (map-set commitments { game-id: game-id, round: round, player: tx-sender } (merge commit {
+                revealed: true,
+                move: (some move),
+                salt: (some salt)
+            }))
+            
+            (let (
+                (opponent (if (is-eq tx-sender (get player1 game)) (unwrap-panic (get player2 game)) (get player1 game)))
+                (opponent-commit (unwrap-panic (map-get? commitments { game-id: game-id, round: round, player: opponent })))
+            )
+                (if (get revealed opponent-commit)
+                    (resolve-round game-id (merge game { status: "revealed", updated-at: block-height }))
+                    (begin
+                        (map-set games game-id (merge game { updated-at: block-height }))
+                        (ok true)
+                    )
                 )
             )
         )
@@ -310,32 +322,47 @@
                 (let (
                     (player-commit-opt (map-get? commitments { game-id: game-id, round: round, player: tx-sender }))
                 )
-                    (asserts! (is-some player-commit-opt) err-not-committed)
-                    (asserts! (>= block-height (+ updated timeout-commit)) err-timeout-not-reached)
-                    (let (
-                        (wager (get wager game))
-                        (payout (* wager u2))
-                    )
-                        (try! (as-contract (stx-transfer? payout tx-sender tx-sender)))
-                        (update-stats tx-sender true false payout wager)
-                        (map-set games game-id (merge game { status: "finished", winner: (some tx-sender), updated-at: block-height }))
-                        (ok true)
-                    )
-                )
-                (if (is-eq status "committed")
-                    (let (
-                        (player-commit (unwrap-panic (map-get? commitments { game-id: game-id, round: round, player: tx-sender })))
-                    )
-                        (asserts! (get revealed player-commit) err-not-committed)
-                        (asserts! (>= block-height (+ updated timeout-reveal)) err-timeout-not-reached)
+                    (begin
+                        (asserts! (is-some player-commit-opt) err-not-committed)
+                        (asserts! (>= block-height (+ updated timeout-commit)) err-timeout-not-reached)
                         (let (
                             (wager (get wager game))
                             (payout (* wager u2))
                         )
-                            (try! (as-contract (stx-transfer? payout tx-sender tx-sender)))
-                            (update-stats tx-sender true false payout wager)
-                            (map-set games game-id (merge game { status: "finished", winner: (some tx-sender), updated-at: block-height }))
-                            (ok true)
+                            (begin
+                                (try! (as-contract (stx-transfer? payout tx-sender tx-sender)))
+                                (update-stats tx-sender true false payout wager)
+                                (map-set games game-id (merge game { status: "finished", winner: (some tx-sender), updated-at: block-height }))
+                                (ok true)
+                            )
+                        )
+                    )
+                )
+                (if (is-eq status "committed")
+                    (let (
+                        (player-commit-opt (map-get? commitments { game-id: game-id, round: round, player: tx-sender }))
+                    )
+                        (begin
+                            (asserts! (is-some player-commit-opt) err-not-committed)
+                            (let (
+                                (player-commit (unwrap-panic player-commit-opt))
+                            )
+                                (begin
+                                    (asserts! (get revealed player-commit) err-not-committed)
+                                    (asserts! (>= block-height (+ updated timeout-reveal)) err-timeout-not-reached)
+                                    (let (
+                                        (wager (get wager game))
+                                        (payout (* wager u2))
+                                    )
+                                        (begin
+                                            (try! (as-contract (stx-transfer? payout tx-sender tx-sender)))
+                                            (update-stats tx-sender true false payout wager)
+                                            (map-set games game-id (merge game { status: "finished", winner: (some tx-sender), updated-at: block-height }))
+                                            (ok true)
+                                        )
+                                    )
+                                )
+                            )
                         )
                     )
                     err-game-complete

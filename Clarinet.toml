@@ -7,12 +7,12 @@ cache_dir = './.cache'
 requirements = []
 [contracts.rockpaperscissors]
 path = 'contracts/rockpaperscissors.clar'
-clarity_version = 4
-epoch = 'latest'
+clarity_version = 2
+epoch = 2.1
 [contracts.rps-token]
 path = 'contracts/rps-token.clar'
-clarity_version = 4
-epoch = 'latest'
+clarity_version = 2
+epoch = 2.1
 [repl.analysis]
 passes = [
     'check_checker',
