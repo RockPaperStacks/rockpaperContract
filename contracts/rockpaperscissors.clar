@@ -5,7 +5,7 @@
 ;; Constants
 (define-constant err-game-not-found (err u300))
 (define-constant err-not-participant (err u301))
-(define-constant err-wrong-wager (err u302))
+
 (define-constant err-already-committed (err u303))
 (define-constant err-not-committed (err u304))
 (define-constant err-already-revealed (err u305))
@@ -24,7 +24,7 @@
 (define-constant fee-percent u2)
 
 ;; Data Vars
-(define-data-var fee-address principal tx-sender)
+(define-constant fee-address tx-sender)
 (define-data-var game-counter uint u0)
 
 ;; Game maps
@@ -87,13 +87,17 @@
     (let (
         (new-id (+ (var-get game-counter) u1))
     )
-        (begin
+        (let
+            (
+                (wager-to-check wager)
+                (opponent-to-check opponent)
+            )
             (asserts! (or (is-eq mode "single") (is-eq mode "best-of-3") (is-eq mode "best-of-5")) (err u400))
             (try! (stx-transfer? wager tx-sender (as-contract tx-sender)))
             (map-set games new-id {
                 player1: tx-sender,
-                player2: opponent,
-                wager: wager,
+                player2: opponent-to-check,
+                wager: wager-to-check,
                 status: "open",
                 winner: none,
                 created-at: block-height,
@@ -104,7 +108,7 @@
                 mode: mode
             })
             (var-set game-counter new-id)
-            (if (is-none opponent)
+            (if (is-none opponent-to-check)
                 (match (as-max-len? (append (var-get open-games-var) new-id) u50)
                     success (var-set open-games-var success)
                     false
@@ -156,13 +160,16 @@
         (game (unwrap! (map-get? games game-id) err-game-not-found))
         (round (get round game))
     )
-        (begin
+        (let
+            (
+                (hash-to-check move-hash)
+            )
             (asserts! (or (is-eq (get status game) "joined") (is-eq (get status game) "committed")) err-game-complete)
             (asserts! (or (is-eq tx-sender (get player1 game)) (is-eq (some tx-sender) (get player2 game))) err-not-participant)
             (asserts! (is-none (map-get? commitments { game-id: game-id, round: round, player: tx-sender })) err-already-committed)
             
             (map-set commitments { game-id: game-id, round: round, player: tx-sender } {
-                move-hash: move-hash,
+                move-hash: hash-to-check,
                 revealed: false,
                 move: none,
                 salt: none
@@ -243,7 +250,7 @@
                     )
                         (begin
                             (try! (as-contract (stx-transfer? payout tx-sender winner)))
-                            (if (> fee u0) (try! (as-contract (stx-transfer? fee tx-sender (var-get fee-address)))) true)
+                            (if (> fee u0) (try! (as-contract (stx-transfer? fee tx-sender fee-address))) true)
                             (update-stats winner true false payout wager)
                             (update-stats loser false false u0 wager)
                             (try! (as-contract (contract-call? .rps-token mint u10000000 winner)))
