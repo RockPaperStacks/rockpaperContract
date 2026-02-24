@@ -11,14 +11,14 @@ plan:
         - contract-publish:
             contract-name: rps-token
             expected-sender: SP1GNDB8SXJ51GBMSVVXMWGTPRFHGSMWNNBEY25A4
-            cost: 437967
+            cost: 17530
             path: contracts/rps-token.clar
             anchor-block-only: true
             clarity-version: 2
         - contract-publish:
             contract-name: rockpaperscissors
             expected-sender: SP1GNDB8SXJ51GBMSVVXMWGTPRFHGSMWNNBEY25A4
-            cost: 439381
+            cost: 183470
             path: contracts/rockpaperscissors.clar
             anchor-block-only: true
             clarity-version: 2
