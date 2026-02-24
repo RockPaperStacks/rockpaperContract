@@ -16,9 +16,12 @@ function hashMove(move: number, saltStr: string, caller: string): Uint8Array {
 
     // Use the contract to guarantee exact hash serialization matching for tests
     const result = simnet.callReadOnlyFn("rockpaperscissors", "hash-move-wrapper", [moveVal, saltVal], caller);
-    // return buffer from result. The result object usually is an OkCV or ErrCV, we unwrap the buffer.
     const val = result.result as any;
-    return val.value.buffer as Uint8Array;
+    // simnet sometimes returns values as a hex string
+    if (typeof val.value === "string") {
+        return new Uint8Array(Buffer.from(val.value, "hex"));
+    }
+    return new Uint8Array(val.buffer);
 }
 
 const saltFromStr = (saltStr: string) => {
@@ -77,6 +80,7 @@ describe("rockpaperscissors logic tests", () => {
         // P1: Rock (u1), P2: Scissors (u3) => P1 Wins
         const p1Salt = "super-secret-salt-1";
         const p2Salt = "super-secret-salt-2";
+        // hashMove returns a Uint8Array. We must wrap it in Cl.buffer()
         const p1Hash = hashMove(1, p1Salt, address1);
         const p2Hash = hashMove(3, p2Salt, address2);
 
@@ -130,26 +134,28 @@ describe("rockpaperscissors logic tests", () => {
     });
 
     it("verifies hash mismatches are rejected", () => {
-        // Create game
-        simnet.callPublicFn("rockpaperscissors", "create-game", [Cl.uint(100), Cl.none(), Cl.stringAscii("single")], address1);
-        simnet.callPublicFn("rockpaperscissors", "join-game", [Cl.uint(2)], address2);
+        // Create game dynamically to avoid index errors
+        const gameRes = simnet.callPublicFn("rockpaperscissors", "create-game", [Cl.uint(100), Cl.none(), Cl.stringAscii("single")], address1);
+        const gameId = (gameRes.result as any).value;
+
+        simnet.callPublicFn("rockpaperscissors", "join-game", [gameId], address2);
 
         // P1: Rock
         const p1Salt = "super-secret-salt-1";
         const p1Hash = hashMove(1, p1Salt, address1);
 
         // Commit move
-        simnet.callPublicFn("rockpaperscissors", "commit-move", [Cl.uint(2), Cl.buffer(p1Hash)], address1);
+        simnet.callPublicFn("rockpaperscissors", "commit-move", [gameId, Cl.buffer(p1Hash)], address1);
 
         // P2 commits some hash
         const p2Hash = hashMove(2, "random", address2);
-        simnet.callPublicFn("rockpaperscissors", "commit-move", [Cl.uint(2), Cl.buffer(p2Hash)], address2);
+        simnet.callPublicFn("rockpaperscissors", "commit-move", [gameId, Cl.buffer(p2Hash)], address2);
 
         // P1 reveals WRONG move (p1 committed rock=1, reveals scissors=3)
         const receipt = simnet.callPublicFn(
             "rockpaperscissors",
             "reveal-move",
-            [Cl.uint(2), Cl.uint(3), Cl.buffer(saltFromStr(p1Salt))],
+            [gameId, Cl.uint(3), Cl.buffer(saltFromStr(p1Salt))],
             address1
         );
         // Expect hash-mismatch (err u306)
