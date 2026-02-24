@@ -96,17 +96,12 @@ describe("rockpaperscissors logic tests", () => {
         expect(status.result).toBeBool(true);
 
         // Reveal moves
-        console.log("P1 Hash generated locally:", Buffer.from(p1Hash).toString('hex'));
-
         receipt = simnet.callPublicFn(
             "rockpaperscissors",
             "reveal-move",
             [Cl.uint(1), Cl.uint(1), Cl.buffer(saltFromStr(p1Salt))],
             address1
         );
-        console.log("Reveal P1 Receipt:");
-        console.log(receipt.result);
-
         // if the contract rejects with a hash mismatch it might be how we form the buffer in ts versus how `to-consensus-buff?` behaves in Stacks
         expect(receipt.result).toBeOk(Cl.bool(true));
 
@@ -122,12 +117,10 @@ describe("rockpaperscissors logic tests", () => {
         const gameState = simnet.callReadOnlyFn("rockpaperscissors", "get-game", [Cl.uint(1)], address1);
         const unwrapped = gameState.result as any; // The Option<Tuple>
         // Depending on sdk, we can assert directly
-        expect(unwrapped.value.data.status).toEqual(Cl.stringAscii("finished"));
-        expect(unwrapped.value.data.winner).toEqual(Cl.some(Cl.principal(address1)));
+        expect(unwrapped.value.value.status).toEqual(Cl.stringAscii("finished"));
+        expect(unwrapped.value.value.winner).toEqual(Cl.some(Cl.principal(address1)));
 
         // Verify token mint (10 rps tokens -> 10000000 units usually due to decimals)
-        // Wait, did we setup the game-contract inside rps-token? We should!
-        // But our deploy might initialize it appropriately since we coded it. 
         // Let's check token balance of address1.
         const tokenBalance = simnet.callReadOnlyFn("rps-token", "get-balance", [Cl.principal(address1)], address1);
         expect(tokenBalance.result).toBeOk(Cl.uint(10000000));
