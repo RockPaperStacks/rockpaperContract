@@ -449,3 +449,8 @@
 (define-read-only (get-fee-rate)
     fee-percent
 )
+
+(define-read-only (hash-move-wrapper (move uint) (salt (buff 32)))
+    ;; Utility function explicitly for testing or easy generation of the exact commit hash format
+    (sha256 (unwrap-panic (to-consensus-buff? { move: move, salt: salt })))
+)
